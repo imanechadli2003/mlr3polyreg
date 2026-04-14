@@ -1,8 +1,9 @@
 library(mlr3)
 library(mlr3learners)
 library(mlr3tuning)
-library(mlr3polyreg)
 library(ggplot2)
+
+pkgload::load_all()
 
 # 2 jeux de données
 task1 <- tsk("mtcars")
@@ -15,14 +16,17 @@ task2$select(c("latitude", "longitude", "housing_median_age",
 tasks <- list(task1, task2)
 
 # 4 Learners
+poly_lrn <- LearnerRegrPolyFit$new()
+poly_lrn$param_set$values$deg <- 1L
+
 learners <- list(
-  LearnerRegrPolyFit$new(),
+  poly_lrn,
   lrn("regr.featureless"),
   lrn("regr.cv_glmnet"),
   auto_tuner(
     learner = lrn("regr.kknn", k = to_tune(1, 10)),
     resampling = rsmp("cv", folds = 3),
-    measure = msr("regr.mse"),
+    measure = msr("regr.rmse"),
     tuner = tnr("grid_search"),
     terminator = trm("evals", n_evals = 10)
   )
@@ -35,11 +39,14 @@ resampling <- rsmp("cv", folds = 5)
 design <- benchmark_grid(tasks, learners, resampling)
 bmr <- benchmark(design)
 
-# Résultats
-results <- bmr$score(msr("regr.mse"))
+# Résultats avec RMSE
+results <- bmr$score(msr("regr.rmse"))
 
 # Graphique
-ggplot(results, aes(x = regr.mse, y = learner_id)) +
+p <- ggplot(results, aes(x = regr.rmse, y = learner_id)) +
   geom_point() +
-  facet_grid(task_id ~ .) +
-  labs(x = "MSE", y = "Algorithm")
+  facet_grid(task_id ~ ., scales = "free_x") +
+  labs(x = "RMSE", y = "Algorithm", title = "Benchmark Results")
+
+print(p)
+ggsave("benchmark_plot.png", p, width = 8, height = 6)
